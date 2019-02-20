@@ -12,9 +12,10 @@
 #include <linux/vermagic.h>
 
 /*
- *struct path在2.6.20之前的内核中是没有定义的.
- *2.6.25之前的内核struct path定义在linux/namei.h头文件中
- *从2.6.25开始struct path定义在linux/path.h头文件中
+ *Note:
+ *1. struct path don't defined before linux-2.6.20.
+ *2. struct path is defined in linux/namei.h before linux-2.6.25
+ *3. struct path is defined in linux/path.h after 2.6.25
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 #include <linux/path.h> //for struct path
@@ -22,8 +23,8 @@
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 struct path {
-	struct vfsmount *mnt;
-	struct dentry *dentry;
+    struct vfsmount *mnt;
+    struct dentry *dentry;
 };
 #endif
 
@@ -36,17 +37,16 @@ struct dent_node_t {
 };
 
 
-//此处struct dir_context成员一定要放在第一个元素，
-//因为在filldir回调函数中就直接将该成员的地址当成整个struct getdents_callback_t结构体的地址了
+//struct dir_context must be the first memeber
 struct getdents_callback_t {
 #if LINUX_VERSION_CODE > KERNEL_VERSION(3,10,0)
     struct dir_context ctx;
 #endif
-	struct list_head* dents;
+    struct list_head* dents;
     char* root;
     int rootlen;
-	int count;
-	int error;
+    int count;
+    int error;
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
@@ -61,28 +61,28 @@ void nameidata_to_path(struct nameidata* nd,struct path* path)
 }
 #endif
 
-//kernel base path lookup
+//kernel path lookup
 static int kpath_lookup(const char* pathname,
 				unsigned int flags,struct path* path)
 {
-	int rc = -ENOENT;
+    int rc = -ENOENT;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39)
-	struct nameidata nd;
-	rc = path_lookup(pathname,flags,&nd);
-	if(!rc) {
+    struct nameidata nd;
+    rc = path_lookup(pathname,flags,&nd);
+    if(!rc) {
         nameidata_to_path(&nd,path);
-	}
+    }
 #else
-	rc = kern_path(pathname,flags,path);
+    rc = kern_path(pathname,flags,path);
 #endif
 
-	return rc;
+    return rc;
 }
 
 static void kpath_put(struct path* path)
 {
-	dput(path->dentry);
-	mntput(path->mnt);
+    dput(path->dentry);
+    mntput(path->mnt);
 }
 
 static int kvfs_getattr(struct path* path,struct kstat* stat)
@@ -118,7 +118,7 @@ static int filldir(struct dir_context *ctx, const char * name, int namlen, loff_
     char* dname = NULL;
     struct dent_node_t* dnode = NULL;
     #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
-	struct getdents_callback_t* buf = (struct getdents_callback_t*)__buf;
+    struct getdents_callback_t* buf = (struct getdents_callback_t*)__buf;
     #else
     struct getdents_callback_t* buf = container_of(ctx, struct getdents_callback_t, ctx);
     #endif
@@ -135,7 +135,7 @@ static int filldir(struct dir_context *ctx, const char * name, int namlen, loff_
     dnode = kcalloc(1,sizeof(*dnode),GFP_KERNEL);
     if(!dnode) {
         buf->error = -ENOMEM;
-		goto fault;
+        goto fault;
     }
 
     len = buf->rootlen + namlen + sizeof("/") - 1;
@@ -153,12 +153,12 @@ static int filldir(struct dir_context *ctx, const char * name, int namlen, loff_
     INIT_LIST_HEAD(&dnode->node);
     list_add_tail(&dnode->node,buf->dents);
 
-	return 0;
+    return 0;
 
 fault:
     if(dnode) { kfree(dnode); }
 
-	return buf->error;
+    return buf->error;
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
@@ -171,22 +171,22 @@ fault:
 char *kstrndup(const char *s, size_t max, gfp_t gfp)
 {
     size_t len;
-	char *buf;
+    char *buf;
 
-	if (!s)
-		return NULL;
+    if (!s)
+        return NULL;
 
-	len = strnlen(s, max);
-	buf = kcalloc(1,len+1, gfp);
-	if (buf) {
-		memcpy(buf, s, len);
-		buf[len] = '\0';
-	}
-	return buf;
+    len = strnlen(s, max);
+    buf = kcalloc(1,len+1, gfp);
+    if (buf) {
+        memcpy(buf, s, len);
+        buf[len] = '\0';
+    }
+    return buf;
 }
 #endif
 
-//失败返回小于0的错误值; 成功返回获取的文件数，即dents的大小
+//return the number of files,and return errno if an error occured
 int scan_dir(const char* dname,struct list_head* dents)
 {
     int rc = -EINVAL;
@@ -238,11 +238,11 @@ void free_dents(struct list_head* dents)
     struct dent_node_t* next = NULL;
     struct dent_node_t* dnode = NULL;
 
-	list_for_each_entry_safe(dnode,next,dents,node)
-	{
-		list_del(&dnode->node);
-		free_dent_node(dnode);
-	}
+    list_for_each_entry_safe(dnode,next,dents,node)
+    {
+        list_del(&dnode->node);
+        free_dent_node(dnode);
+    }
 }
 
 static int may_dir(const char* pathname)
@@ -264,56 +264,56 @@ static int may_dir(const char* pathname)
 
 static int scan_dir_recursive(const char* dir)
 {
-	int dtype = 0;
-	size_t len = 0;
-	int rc = -EINVAL;
-	struct list_head dents;
-	struct list_head* phead = NULL;
-	struct dent_node_t* dnode = NULL;
+    int dtype = 0;
+    size_t len = 0;
+    int rc = -EINVAL;
+    struct list_head dents;
+    struct list_head* phead = NULL;
+    struct dent_node_t* dnode = NULL;
 
-	if(unlikely(!dir)) { return rc; }
+    if(unlikely(!dir)) { return rc; }
 
     rc = may_dir(dir);
     if(rc) { return rc; }
 
-	rc = -ENOMEM;
-	dnode = kcalloc(1,sizeof(*dnode),GFP_KERNEL);
-	if(!dnode) { return rc; }
+    rc = -ENOMEM;
+    dnode = kcalloc(1,sizeof(*dnode),GFP_KERNEL);
+    if(!dnode) { return rc; }
 
-	len = strlen(dir);
-	dnode->d_name = kstrndup(dir,len,GFP_KERNEL);
-	if(!dnode->d_name) {
-		kfree(dnode);
-		return rc;
-	}
+    len = strlen(dir);
+    dnode->d_name = kstrndup(dir,len,GFP_KERNEL);
+    if(!dnode->d_name) {
+    	kfree(dnode);
+    	return rc;
+    }
 
     dnode->namelen = len;
     dnode->d_type = DT_DIR;
-	INIT_LIST_HEAD(&dnode->node);
+    INIT_LIST_HEAD(&dnode->node);
     INIT_LIST_HEAD(&dents);
 
-	list_add_tail(&dnode->node,&dents);
+    list_add_tail(&dnode->node,&dents);
 
-	rc = 0;
-	while(!list_empty(&dents)) {
-		phead = dents.next;
-		dnode = list_entry(phead,struct dent_node_t,node);
-		list_del(&dnode->node);
+    rc = 0;
+    while(!list_empty(&dents)) {
+        phead = dents.next;
+        dnode = list_entry(phead,struct dent_node_t,node);
+        list_del(&dnode->node);
 
-		printk("fill dir ent: %s\n",dnode->d_name);
+        printk("fill dir ent: %s\n",dnode->d_name);
 
-		dtype = dnode->d_type;
-		if((dtype != DT_DIR) && (dtype != DT_REG)) {
-			free_dent_node(dnode);
-			continue;
-		}
+        dtype = dnode->d_type;
+        if((dtype != DT_DIR) && (dtype != DT_REG)) {
+            free_dent_node(dnode);
+            continue;
+        }
 
-		if(dtype == DT_DIR) { (void)scan_dir(dnode->d_name,&dents); }
-		free_dent_node(dnode);
-	}
+        if(dtype == DT_DIR) { (void)scan_dir(dnode->d_name,&dents); }
+        free_dent_node(dnode);
+    }
 
-	free_dents(&dents);
-	return rc;
+    free_dents(&dents);
+    return rc;
 }
 
 #define DEVICE_NAME     "kscandir"
